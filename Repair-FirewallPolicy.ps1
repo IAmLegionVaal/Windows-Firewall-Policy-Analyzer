@@ -1,0 +1,9 @@
+[CmdletBinding(SupportsShouldProcess=$true)]
+param([switch]$EnableFirewall,[switch]$RestoreDefaultPolicy,[string[]]$EnableRuleGroup,[string[]]$DisableRuleName,[string]$OutputPath="$env:USERPROFILE\Desktop\FirewallPolicyRepair")
+$ErrorActionPreference='Stop';New-Item -ItemType Directory -Path $OutputPath -Force|Out-Null;$Log=Join-Path $OutputPath ("repair-{0:yyyyMMdd-HHmmss}.log"-f(Get-Date));function L($m){"$(Get-Date -Format s) $m"|Tee-Object -FilePath $Log -Append};if(-not($EnableFirewall-or$RestoreDefaultPolicy-or$EnableRuleGroup-or$DisableRuleName)){throw'Choose at least one repair action.'}
+Get-NetFirewallProfile|Export-Clixml (Join-Path $OutputPath 'profiles-before.xml');Get-NetFirewallRule|Select DisplayName,Enabled,Direction,Action,Profile|Export-Csv (Join-Path $OutputPath 'rules-before.csv') -NoTypeInformation
+if($EnableFirewall-and$PSCmdlet.ShouldProcess('All firewall profiles','Enable')){Set-NetFirewallProfile -Profile Domain,Private,Public -Enabled True;L'Firewall profiles enabled.'}
+if($RestoreDefaultPolicy-and$PSCmdlet.ShouldProcess('Windows Firewall','Restore default policy')){netsh advfirewall export (Join-Path $OutputPath 'firewall-before.wfw')|Tee-Object -FilePath $Log -Append;netsh advfirewall reset|Tee-Object -FilePath $Log -Append;L'Default firewall policy restored.'}
+foreach($g in $EnableRuleGroup){if($PSCmdlet.ShouldProcess($g,'Enable firewall rule group')){Enable-NetFirewallRule -DisplayGroup $g;L"Enabled group $g"}}
+foreach($r in $DisableRuleName){if($PSCmdlet.ShouldProcess($r,'Disable firewall rule')){Disable-NetFirewallRule -DisplayName $r;L"Disabled rule $r"}}
+Get-NetFirewallProfile|Export-Clixml (Join-Path $OutputPath 'profiles-after.xml');L'Repair workflow finished.'
